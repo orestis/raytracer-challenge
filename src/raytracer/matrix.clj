@@ -202,10 +202,10 @@
                       twelve)
             x (->canvas-coords (c/x p))
             y (->canvas-coords (c/z p))]
-        (println p x y )
         (rc/pixel-write! cnv x y color)))
     cnv))
 
+#_
 (-> (draw-clock)
     (rc/canvas-str)
     (->> (spit "clock.ppm")))
