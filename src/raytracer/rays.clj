@@ -20,12 +20,30 @@
     (t/is (= (position ray -1) (r/point 1 3 4)))
     (t/is (= (position ray 2.5) (r/point 4.5 3 4)))))
 
+(defn material
+  ([] (material 0.1 0.9 0.9 200.0 (rc/color 1 1 1)))
+  ([ambient diffuse specular shininess color]
+   {:material/ambient ambient
+    :material/diffuse diffuse
+    :material/specular specular
+    :material/shininess shininess
+    :material/color color}))
+
 (defonce sphere-ids (atom 0))
 
 (defn sphere
   ([] (sphere (swap! sphere-ids inc)))
   ([id] {:sphere/id id
+         :sphere/material (material)
          :sphere/transform (m/identity-matrix 4)}))
+
+
+(defn point-light [position intensity]
+  {:light/position position
+   :light/intensity intensity})
+
+(defn set-material [s m]
+  (assoc s :sphere/material m))
 
 (defn set-transform [s t]
   (assoc s :sphere/transform t))
@@ -170,13 +188,14 @@
   (let [ray-origin (r/point 0 0 -5)
         wall-z 10.0
         wall-size 7.0
-        canvas-pixels 100
+        canvas-pixels 400
         cnv (rc/canvas canvas-pixels canvas-pixels)
         pixel-size (/ wall-size canvas-pixels)
         half (/ wall-size 2)
         -half (m/sub 0 half)
         color (rc/color 1 0 0)
-        shape (sphere)]
+        shape (-> (sphere)
+                  (set-transform (rm/scaling 1 0.5 1)))]
     (doseq [y (range canvas-pixels)
             :let [world-y (m/sub half (m/mul pixel-size y))]]
       (doseq [x (range canvas-pixels)]
@@ -193,4 +212,156 @@
   (-> (draw-sphere)
       (rc/canvas-str)
       (->> (spit "sphere.ppm")))
+  )
+
+
+(defn normal-at [s world-point]
+  (let [{:sphere/keys [transform]} s
+        object-point (m/mmul (m/inverse transform) world-point)
+        object-normal (m/sub object-point (r/point 0 0 0))
+        world-normal (m/mmul (-> transform m/inverse m/transpose) object-normal)]
+    (-> world-normal
+        (m/mset 3 0)
+        (m/normalise)))
+
+  )
+
+
+(t/deftest normals-test
+  (let [s (sphere)
+        s33 (m/div (m/sqrt 3) 3)]
+    (t/is (= (r/vector 1 0 0)
+             (normal-at s (r/point 1 0 0))))
+    (t/is (= (r/vector 0 1 0)
+             (normal-at s (r/point 0 1 0))))
+    (t/is (= (r/vector 0 0 1)
+             (normal-at s (r/point 0 0 1))))
+    (t/is (= (r/vector s33 s33 s33)
+             (normal-at s (r/point s33 s33 s33))))))
+
+
+(t/deftest normals-transformed-test
+  (let [s (-> (sphere)
+              (set-transform (rm/translation 0 1 0)))
+        n (normal-at s (r/point 0 1.70711 -0.70711))]
+    (t/is (m/equals n (r/vector 0 0.70711 -0.70711) 0.00001)))
+  (let [s (-> (sphere)
+              (set-transform (m/mmul
+                              (rm/scaling 1 0.5 1)
+                              (rm/rotation-z (/ Math/PI 5)))))
+        s22 (m/div (m/sqrt 2) 2)
+        n (normal-at s (r/point 0 s22 (- s22)))]
+    (t/is (m/equals n (r/vector 0 0.97014 -0.24254) 0.00001))))
+
+
+(defn reflect [in normal]
+  (m/sub in (m/mul normal 2 (m/dot in normal)))
+  )
+
+
+(t/deftest reflections-test
+  (let [v (r/vector 1 -1 0)
+        n (r/vector 0 1 0)
+        r (reflect v n)]
+    (t/is (= r (r/vector 1 1 0))))
+  (let [s22 (m/div (m/sqrt 2) 2)
+        v (r/vector 0 -1 0)
+        n (r/vector s22 s22 0)
+        r (reflect v n)]
+    (t/is (m/equals r (r/vector 1 0 0)
+                    0.00001))))
+
+(defn lighting [material point light-source eyev normalv]
+  (let [{:material/keys [ambient diffuse shininess specular color]} material
+        {:light/keys [intensity position]} light-source
+        effective-color (m/mul color intensity)
+        lightv (m/normalise (m/sub position point))
+        l-ambient (m/mul effective-color ambient)
+        light-dot-normal (m/dot lightv normalv)]
+    (if (< light-dot-normal 0)
+      l-ambient
+      (let [l-diffuse (m/mul effective-color diffuse light-dot-normal)
+            reflectv (reflect (r/- lightv) normalv)
+            reflect-dot-eye (m/dot reflectv eyev)]
+        (if (<= reflect-dot-eye 0)
+          (m/add l-ambient l-diffuse)
+          (let [factor (m/pow reflect-dot-eye shininess)
+                l-specular (m/mul intensity specular factor)]
+            (m/add l-ambient l-diffuse l-specular)))))))
+
+
+(defn =? [x y]
+  (m/equals x y 0.00001))
+
+(t/deftest lighting-test
+  (let [m (material)
+        p (r/point 0 0 0)
+        s22 (m/div (m/sqrt 2) 2)]
+    (t/testing "eye between light and surface"
+      (let [eyev (r/vector 0 0 -1)
+            normalv (r/vector 0 0 -1)
+            light (point-light (r/point 0 0 -10) (rc/color 1 1 1))]
+        (t/is (=? (lighting m p light eyev normalv)
+                  (rc/color 1.9 1.9 1.9)))))
+    (t/testing "eye offset 45deg, between light and surface"
+      (let [eyev (r/vector 0 s22 (- s22))
+            normalv (r/vector 0 0 -1)
+            light (point-light (r/point 0 0 -10) (rc/color 1 1 1))]
+        (t/is (=? (lighting m p light eyev normalv)
+                  (rc/color 1.0 1.0 1.0)))))
+    (t/testing "light offset 45deg"
+      (let [eyev (r/vector 0 0 -1)
+            normalv (r/vector 0 0 -1)
+            light (point-light (r/point 0 10 -10) (rc/color 1 1 1))]
+        (t/is (=? (lighting m p light eyev normalv)
+                  (rc/color 0.7364 0.7364 0.7364)))))
+    (t/testing "eye in light reflection"
+      (let [eyev (r/vector 0 (- s22) (- s22))
+            normalv (r/vector 0 0 -1)
+            light (point-light (r/point 0 10 -10) (rc/color 1 1 1))]
+        (t/is (=? (lighting m p light eyev normalv)
+                  (rc/color 1.6364 1.6364 1.6364)))))
+    (t/testing "light behind surface"
+      (let [eyev (r/vector 0 0 -1)
+            normalv (r/vector 0 0 -1)
+            light (point-light (r/point 0 0 10) (rc/color 1 1 1))]
+        (t/is (=? (lighting m p light eyev normalv)
+                  (rc/color 0.1 0.1 0.1)))))))
+
+
+(defn draw-sphere-3d []
+  (let [ray-origin (r/point 0 0 -5)
+        wall-z 10.0
+        wall-size 7.0
+        canvas-pixels 400
+        cnv (rc/canvas canvas-pixels canvas-pixels)
+        pixel-size (/ wall-size canvas-pixels)
+        half (/ wall-size 2)
+        -half (m/sub 0 half)
+        light (point-light (r/point -10 10 -10)
+                           (rc/color 1 1 1))
+        shape (-> (sphere)
+                  (set-material (assoc (material) :material/color (rc/color 1 0.2 1)))
+                  (set-transform (rm/scaling 1 1 1)))]
+    (doseq [y (range canvas-pixels)
+            :let [world-y (m/sub half (m/mul pixel-size y))]]
+      (doseq [x (range canvas-pixels)]
+        (let [world-x (m/add -half (m/mul pixel-size x))
+              world-position (r/point world-x world-y wall-z)
+              r (ray ray-origin (r/normalise (r/- world-position ray-origin)))
+              xs (intersect r shape)]
+          (when-let [ray-hit (hit xs)]
+            (let [point (position r (:intersection/t ray-hit))
+                  normal (normal-at (:intersection/object ray-hit) point)
+                  eye (r/- (:ray/direction r))
+                  material (-> ray-hit :intersection/object :sphere/material)
+                  lighted-color (lighting material point light eye normal)]
+              (rc/pixel-write! cnv x y lighted-color))))))
+    cnv))
+
+
+(comment
+ (-> (draw-sphere-3d)
+      (rc/canvas-str)
+      (->> (spit "sphere-3d.ppm")))
   )
