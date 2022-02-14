@@ -333,7 +333,7 @@
   (let [ray-origin (r/point 0 0 -5)
         wall-z 10.0
         wall-size 7.0
-        canvas-pixels 400
+        canvas-pixels 1500
         cnv (rc/canvas canvas-pixels canvas-pixels)
         pixel-size (/ wall-size canvas-pixels)
         half (/ wall-size 2)
@@ -361,7 +361,9 @@
 
 
 (comment
- (-> (draw-sphere-3d)
-      (rc/canvas-str)
-      (->> (spit "sphere-3d.ppm")))
+
+  (time
+   (-> (draw-sphere-3d)
+       (rc/canvas-str)
+       (->> (spit "sphere-3d.ppm"))))
   )

@@ -74,37 +74,63 @@
      (= (pixel-read cnv' 2 3)
         red))))
 
+(defn- format-ppm [x]
+  (str (int (m/clamp x 0 255))))
+
+(defn- write-v [sb s add-space?]
+  (when add-space?
+    (.append sb " "))
+  (.append sb s)
+  (if add-space?
+    (inc (count s))
+    (count s)))
+
+(defn would-overflow?
+  [line-length n]
+  (> (+ line-length n) 70))
+
 (defn canvas-str [cnv]
-  (let [sb (StringBuilder.)
-        w (dec (* 3 (width cnv)))
+  (let [sb (StringBuilder. (+ 1024 (* (width cnv) (height cnv) 4)))
+        max-x (dec (width cnv))
         ppm (-> cnv
                 (r/* 255)
-                (m/round))
-        sq (m/eseq ppm)]
+                (m/round))]
     (.append sb "P3\n")
     (.append sb (str (width cnv) " " (height cnv) "\n"))
     (.append sb "255")
-    (loop  [p (first sq)
-            sq (rest sq)
-            x 0
-            line-length 0]
-      (let [eol (= x w)
-            p (str (int (m/clamp p 0 255)))
-            line-length' (+ line-length (inc (count p)))
-            ;; adding this string would overflow
-            would-overflow? (> line-length' 70)
-            add-space? (not (or (= x 0) would-overflow?))
-            line-length' (if add-space?
-                           line-length'
-                           (count p))]
-        (if (not add-space?)
-          (.append sb "\n")
-          (.append sb " "))
-        (.append sb p)
-        (when (seq sq)
-          (recur (first sq) (rest sq)
-                 (if eol 0 (inc x))
-                 line-length'))))
+    (doseq [y (range (height cnv))
+            :let [line-length (atom 0)]]
+      ;; on every new row, break the line
+      (.append sb "\n")
+      (loop [x 0]
+        (loop [z 0]
+          (let [pp (m/mget ppm x y z)
+                s (format-ppm pp)
+                overflow? (would-overflow? @line-length (inc (count s)))
+                add-space? (not (or overflow? (= @line-length 0)))]
+            (if overflow?
+              (do
+                (.append sb "\n")
+                (reset! line-length (count s)))
+              (swap! line-length + (inc (count s))))
+            (write-v sb s add-space?))
+          (when (< z 2)
+            (recur (inc z))))
+        (when (< x max-x)
+          (recur (inc x))))
+      #_(doseq [x (range (width cnv))
+                z (range 3)]
+          (let [pixel (pixel-read ppm x y)]
+            (let [pp (m/mget ppm x y z); (m/eseq pixel)
+                  s (format-ppm pp)
+                  overflow? (would-overflow? @line-length (inc (count s)))
+                  add-space? (not (or overflow? (= @line-length 0)))]
+              (if overflow?
+                (do
+                  (.append sb "\n")
+                  (reset! line-length (count s)))
+                (swap! line-length + (inc (count s))))
+              (write-v sb s add-space?)))))
     (.append sb "\n")
     (str sb)))
 
