@@ -1,3 +1,7 @@
 {:paths ["src"]
- :deps {net.mikera/core.matrix {:mvn/version "0.62.0"}
-        net.mikera/vectorz-clj {:mvn/version "0.48.0"}}}
+ :deps {
+        net.mikera/core.matrix {:mvn/version "0.62.0"}
+        net.mikera/vectorz-clj {:mvn/version "0.48.0"}}
+ :aliases {:profiler
+           {:jvm-opts ["-Djdk.attach.allowAttachSelf" "-XX:+UnlockDiagnosticVMOptions" "-XX:+DebugNonSafepoints"]
+            :extra-deps {com.clojure-goes-fast/clj-async-profiler {:mvn/version "0.5.1"}}}}}

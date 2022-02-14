@@ -301,9 +301,16 @@
       (rc/canvas-str)
       (->> (spit "world-default.ppm"))))
 (comment
+  (require '[clj-async-profiler.core :as prof])
+
+  (time
+   (-> (render-example 640 480)
+       (rc/canvas-str)
+       (->> (spit "world.ppm"))))
   (time (do (render-example 640 480)
             :ok))
-  (time
+  (prof/serve-files 7001)
+  (prof/profile
    (-> (render-example 640 480)
        (rc/canvas-str)
        (->> (spit "world.ppm")))))

@@ -4,6 +4,7 @@
   (:refer-clojure :exclude [vector vector? + - * /]))
 
 (m/set-current-implementation :vectorz)
+(set! *warn-on-reflection* true)
 
 (defn tuple [& args]
   (m/array args))

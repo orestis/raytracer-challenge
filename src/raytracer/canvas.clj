@@ -61,6 +61,10 @@
   (m/set-selection cnv x y :all c))
 
 (defn pixel-write! [cnv x y c]
+  (m/mset! cnv x y 0 (m/mget c 0))
+  (m/mset! cnv x y 1 (m/mget c 1))
+  (m/mset! cnv x y 2 (m/mget c 2))
+  #_
   (m/set-selection! cnv x y :all c))
 
 (defn pixel-read [cnv x y]
@@ -77,7 +81,7 @@
 (defn- format-ppm [x]
   (str (int (m/clamp x 0 255))))
 
-(defn- write-v [sb s add-space?]
+(defn- write-v [^StringBuilder sb s add-space?]
   (when add-space?
     (.append sb " "))
   (.append sb s)
@@ -90,7 +94,7 @@
   (> (+ line-length n) 70))
 
 (defn canvas-str [cnv]
-  (let [sb (StringBuilder. (+ 1024 (* (width cnv) (height cnv) 4)))
+  (let [sb (StringBuilder. (int (+ 1024 (* (width cnv) (height cnv) 4))))
         max-x (dec (width cnv))
         ppm (-> cnv
                 (r/* 255)
