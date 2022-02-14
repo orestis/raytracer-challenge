@@ -263,24 +263,38 @@
         left-wall (-> (sphere)
                       (rays/set-material floor-material)
                       (rays/set-transform (m/mmul (rm/translation 0 0 5)
-                                                   (rm/rotation-y (- (/ Math/PI 4)))
-                                                   (rm/rotation-x (/ Math/PI 2))
-                                                   (rm/scaling 10 0.01 10))))
+                                                  (rm/rotation-y (- (/ Math/PI 4)))
+                                                  (rm/rotation-x (/ Math/PI 2))
+                                                  (rm/scaling 10 0.01 10))))
         right-wall (-> (sphere)
                        (rays/set-material floor-material)
                        (rays/set-transform (m/mmul (rm/translation 0 0 5)
-                                                    (rm/rotation-y (/ Math/PI 4))
-                                                    (rm/rotation-x (/ Math/PI 2))
-                                                    (rm/scaling 10 0.01 10))))
+                                                   (rm/rotation-y (/ Math/PI 4))
+                                                   (rm/rotation-x (/ Math/PI 2))
+                                                   (rm/scaling 10 0.01 10))))
         middle (-> (sphere)
                    (rays/set-transform (rm/translation -0.5 1 0.5))
                    (rays/set-material (-> (material)
                                           (assoc :material/diffuse 0.7
                                                  :material/specular 0.3
-                                                 :material/color (rc/color 0.1 0.1 0.9)))))
+                                                 :material/color (rc/color 0.1 1 0.5)))))
+        right (-> (sphere)
+                   (rays/set-transform (m/mmul (rm/translation 1.5 0.5 -0.5)
+                                               (rm/scaling 0.5 0.5 0.5)))
+                   (rays/set-material (-> (material)
+                                          (assoc :material/diffuse 0.7
+                                                 :material/specular 0.3
+                                                 :material/color (rc/color 0.5 1 0.1)))))
+        left (-> (sphere)
+                   (rays/set-transform (m/mmul (rm/translation -1.5 0.33 -0.75)
+                                               (rm/scaling 0.33 0.33 0.33)))
+                   (rays/set-material (-> (material)
+                                          (assoc :material/diffuse 0.7
+                                                 :material/specular 0.3
+                                                 :material/color (rc/color 1 0.8 0.1)))))
 
         world (-> (default-world)
-                  (assoc :world/objects [floor left-wall right-wall middle]
+                  (assoc :world/objects [floor left-wall right-wall middle right left]
                          :world/light (point-light (r/point -10 10 -10)
                                                    (rc/color 1 1 1))))
         camera (-> (new-camera w h (/ Math/PI 3))
@@ -304,11 +318,9 @@
   (require '[clj-async-profiler.core :as prof])
 
   (time
-   (-> (render-example 640 480)
+   (-> (render-example 600 300)
        (rc/canvas-str)
        (->> (spit "world.ppm"))))
-  (time (do (render-example 640 480)
-            :ok))
   (prof/serve-files 7001)
   (prof/profile
    (-> (render-example 640 480)
