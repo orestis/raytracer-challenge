@@ -6,6 +6,9 @@
 (m/set-current-implementation :vectorz)
 (set! *warn-on-reflection* true)
 
+
+(def EPSILON 0.00001)
+
 (defn tuple [& args]
   (m/array args))
 
@@ -45,11 +48,12 @@
       (t/is (= false (point? a)))
       (t/is (= true (vector? a))))))
 
-(defn point [x y z]
-  (tuple x y z 1.0))
 
-(defn vector [x y z]
-  (tuple x y z 0.0))
+(defmacro point [x y z]
+  `(m/array [~x ~y ~z 1.0]))
+
+(defmacro vector [x y z]
+  `(m/array [~x ~y ~z 0.0]))
 
 (t/deftest tuples-2
   (t/is (= (tuple 4 -4 3 1)

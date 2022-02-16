@@ -25,10 +25,15 @@
 
 
 (defn intersect-world [world ray]
-  (let [objs (:world/objects world)]
-    (->> objs
-         (mapcat #(intersect ray %))
-         (sort-by :intersection/t))))
+  (let [objs (:world/objects world)
+        is-al (java.util.ArrayList.)]
+    (doseq [obj objs
+            :let [is (intersect ray obj)]]
+      (.addAll is-al is))
+    (.sort is-al (comparator (fn [x y]
+                               (< (:intersection/t x)
+                                  (:intersection/t y)))))
+    is-al))
 
 (t/deftest world-intersect-test
   (let [w (default-world)
@@ -38,7 +43,6 @@
              (map :intersection/t xs)))))
 
 
-(def EPSILON 0.00001)
 (defn prepare-computations [{:intersection/keys [t object] :as isection}
                             ray]
   (let [point (rays/position ray t)
@@ -49,7 +53,7 @@
     (assoc isection
            :comps/inside inside
            :comps/point point
-           :comps/over-point (m/add point (m/mul normalv EPSILON))
+           :comps/over-point (m/add point (m/mul normalv r/EPSILON))
            :comps/eyev eyev
            :comps/normalv normalv)))
 
@@ -87,7 +91,7 @@
         i (rays/intersection 5 s)
         comps (prepare-computations i r)
         {:comps/keys [over-point point]} comps]
-    (t/is (< (r/z over-point) (- (/ EPSILON 2))))
+    (t/is (< (r/z over-point) (- (/ r/EPSILON 2))))
     (t/is (> (r/z point) (r/z over-point)))))
 
 (defn shadowed? [world point]
@@ -317,6 +321,7 @@
   (let [floor-material (-> (material)
                            (assoc :material/specular 0
                                   :material/color (rc/color 1 0.9 0.9)))
+        floor-plane (rays/shape :plane)
         floor (-> (sphere)
                   (rays/set-transform (rm/scaling 10 0.01 10))
                   (rays/set-material floor-material))
@@ -354,7 +359,7 @@
                                                  :material/color (rc/color 1 0.8 0.1)))))
 
         world (-> (default-world)
-                  (assoc :world/objects [floor left-wall right-wall middle right left]
+                  (assoc :world/objects [floor-plane middle right left]
                          :world/light (point-light (r/point -10 10 -10)
                                                    (rc/color 1 1 1))))
         camera (-> (new-camera w h (/ Math/PI 3))
@@ -370,6 +375,7 @@
                                                             (r/point 0 0 0)
                                                             (r/vector 0 1 0))))]
     (render camera world)))
+
 (comment
   (-> (render-default 111 110)
       (rc/canvas-str)
@@ -378,7 +384,7 @@
   (require '[clj-async-profiler.core :as prof])
 
   (time
-   (-> (render-example 600 300)
+   (-> (render-example 600 480)
        (rc/canvas-str)
        (->> (spit "world.ppm"))))
   (prof/serve-files 7001)

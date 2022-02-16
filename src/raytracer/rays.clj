@@ -29,15 +29,19 @@
     :material/shininess shininess
     :material/color color}))
 
-(defonce sphere-ids (atom 0))
+(defonce shape-ids (atom 0))
 
-(defn sphere
-  ([] (sphere (swap! sphere-ids inc)))
-  ([id] {:shape/id id
-         :shape/type :sphere
-         :shape/material (material)
-         :shape/transform (m/identity-matrix 4)}))
+(defn shape [type]
+  {:shape/id (swap! shape-ids inc)
+   :shape/type type
+   :shape/material (material)
+   :shape/transform (m/identity-matrix 4)})
 
+(defn sphere []
+  (shape :sphere))
+
+(defn plane []
+  (shape :plane))
 
 (defn point-light [position intensity]
   {:light/position position
@@ -80,6 +84,46 @@
                       (m/mul 2 a))]
         [(intersection t1 shape)
          (intersection t2 shape)]))))
+
+(defmethod local-intersect :plane [{:ray/keys [origin direction]} shape]
+  (if (< (m/abs (r/y direction))
+         r/EPSILON)
+    []
+    (let [t (m/div (- (r/y origin))
+                   (r/y direction))]
+      [(intersection t shape)])))
+
+(t/deftest plane-intersect
+  (t/testing "parallel"
+    (let [p (plane)
+          r (ray (r/point 0 10 0)
+                 (r/vector 0 0 1))]
+      (t/is (= []
+               (local-intersect r p)))))
+  (t/testing "coplanar"
+    (let [p (plane)
+          r (ray (r/point 0 0 0)
+                 (r/vector 0 0 1))]
+      (t/is (= []
+               (local-intersect r p)))))
+  (t/testing "from above"
+    (let [p (plane)
+          r (ray (r/point 0 1 0)
+                 (r/vector 0 -1 0))
+          xs  (local-intersect r p)
+          {:intersection/keys [object t]} (first xs)]
+      (t/is (= 1 (count xs)))
+      (t/is (= t 1.0))
+      (t/is (= object p))))
+  (t/testing "from below"
+    (let [p (plane)
+          r (ray (r/point 0 -1 0)
+                 (r/vector 0 1 0))
+          xs  (local-intersect r p)
+          {:intersection/keys [object t]} (first xs)]
+      (t/is (= 1 (count xs)))
+      (t/is (= t 1.0))
+      (t/is (= object p)))))
 
 (defn intersect [ray shape]
   (let [ray2 (ray-transform ray (m/inverse (:shape/transform shape)))]
@@ -225,6 +269,9 @@
 (defmethod local-normal-at :sphere [s local-point]
   (m/sub local-point (r/point 0 0 0)))
 
+(defmethod local-normal-at :plane [s local-point]
+  (r/vector 0 1 0))
+
 
 (defn normal-at [s world-point]
   (let [{:shape/keys [transform]} s
@@ -233,9 +280,7 @@
         world-normal (m/mmul (-> transform m/inverse m/transpose) object-normal)]
     (-> world-normal
         (m/mset 3 0)
-        (m/normalise)))
-
-  )
+        (m/normalise))))
 
 
 (t/deftest normals-test
