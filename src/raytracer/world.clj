@@ -38,23 +38,29 @@
              (map :intersection/t xs)))))
 
 
+(def EPSILON 0.00001)
 (defn prepare-computations [{:intersection/keys [t object] :as isection}
                             ray]
   (let [point (rays/position ray t)
         normalv (rays/normal-at object point)
         eyev (r/- (:ray/direction ray))
-        inside (neg? (m/dot normalv eyev))]
+        inside (neg? (m/dot normalv eyev))
+        normalv (if inside (r/- normalv) normalv)]
     (assoc isection
            :comps/inside inside
            :comps/point point
+           :comps/over-point (m/add point (m/mul normalv EPSILON))
            :comps/eyev eyev
-           :comps/normalv (if inside (r/- normalv) normalv))))
+           :comps/normalv normalv)))
 
 (t/deftest computations-test
   (let [r (ray (r/point 0 0 -5) (r/vector 0 0 1))
         s (sphere)
         i (rays/intersection 4 s)
-        comps (prepare-computations i r)]
+        comps (select-keys (prepare-computations i r)
+                           [:intersection/t :intersection/object
+                            :comps/point :comps/eyev :comps/normalv :comps/inside])
+        ]
     (t/is (= {:intersection/t (:intersection/t i)
               :intersection/object (:intersection/object i)
               :comps/point (r/point 0 0 -1)
@@ -65,15 +71,53 @@
   (let [r (ray (r/point 0 0 0) (r/vector 0 0 1))
         s (sphere)
         i (rays/intersection 1 s)
-        comps (prepare-computations i r)]
+        comps (select-keys (prepare-computations i r)
+                           [:intersection/t :intersection/object
+                            :comps/point :comps/eyev :comps/normalv :comps/inside])]
     (t/is (= {:intersection/t (:intersection/t i)
               :intersection/object (:intersection/object i)
               :comps/point (r/point 0 0 1)
               :comps/eyev (r/vector 0 0 -1)
               :comps/normalv (r/vector 0 0 -1)
               :comps/inside true}
-             comps))))
+             comps)))
+  (let [r (ray (r/point 0 0 -5) (r/vector 0 0 1))
+        s (-> (sphere)
+              (set-transform (rm/translation 0 0 1)))
+        i (rays/intersection 5 s)
+        comps (prepare-computations i r)
+        {:comps/keys [over-point point]} comps]
+    (t/is (< (r/z over-point) (- (/ EPSILON 2))))
+    (t/is (> (r/z point) (r/z over-point)))))
 
+(defn shadowed? [world point]
+  (let [v (m/sub (-> world :world/light :light/position) point)
+        distance (m/magnitude v)
+        direction (m/normalise v)
+        r (rays/ray point direction)
+        is (intersect-world world r)
+        h (rays/hit is)]
+    (if (and h (< (:intersection/t h) distance))
+      true
+      false)))
+
+(t/deftest shadowed-test
+  (t/testing "nothing is collinear with point and light"
+    (let [w (default-world)
+          p (r/point 0 10 0)]
+      (t/is (= false (shadowed? w p)))))
+  (t/testing "object between point and light"
+    (let [w (default-world)
+          p (r/point 10 -10 10)]
+      (t/is (= true (shadowed? w p)))))
+  (t/testing "object behind light"
+    (let [w (default-world)
+          p (r/point -20 20 -20)]
+      (t/is (= false (shadowed? w p)))))
+  (t/testing "object behind point"
+    (let [w (default-world)
+          p (r/point -2 2 -2)]
+      (t/is (= false (shadowed? w p))))))
 
 (defn shade-hit [world comps]
   (rays/lighting
@@ -81,7 +125,8 @@
    (:comps/point comps)
    (:world/light world)
    (:comps/eyev comps)
-   (:comps/normalv comps)))
+   (:comps/normalv comps)
+   (shadowed? world (:comps/over-point comps))))
 
 (t/deftest shade-hit-test
   (let [w (default-world)
@@ -102,6 +147,21 @@
         c (shade-hit w comps)]
     (t/is (rays/=? c
                    (rc/color 0.90498 0.90498 0.90498)))))
+
+(t/deftest shade-hit-test-shadow
+  (let [w (-> (default-world)
+              (assoc :world/light (point-light (r/point 0 0 -10)
+                                               (rc/color 1 1 1)))
+              (assoc :world/objects [(sphere)
+                                     (-> (sphere)
+                                         (set-transform (rm/translation 0 0 10)))]))
+        r (ray (r/point 0 0 5) (r/vector 0 0 1))
+        shape (-> w :world/objects second)
+        i (rays/intersection 4 shape)
+        comps (prepare-computations i r)
+        c (shade-hit w comps)]
+    (t/is (rays/=? c
+                   (rc/color 0.1 0.1 0.1)))))
 
 (defn color-at [world ray]
   (let [xs (intersect-world world ray)

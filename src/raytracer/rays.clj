@@ -271,14 +271,14 @@
     (t/is (m/equals r (r/vector 1 0 0)
                     0.00001))))
 
-(defn lighting [material point light-source eyev normalv]
+(defn lighting [material point light-source eyev normalv in-shadow]
   (let [{:material/keys [ambient diffuse shininess specular color]} material
         {:light/keys [intensity position]} light-source
         effective-color (m/mul color intensity)
         lightv (m/normalise (m/sub position point))
         l-ambient (m/mul effective-color ambient)
         light-dot-normal (m/dot lightv normalv)]
-    (if (< light-dot-normal 0)
+    (if (or (< light-dot-normal 0) in-shadow)
       l-ambient
       (let [l-diffuse (m/mul effective-color diffuse light-dot-normal)
             reflectv (reflect (r/- lightv) normalv)
@@ -301,31 +301,37 @@
       (let [eyev (r/vector 0 0 -1)
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 0 -10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv)
+        (t/is (=? (lighting m p light eyev normalv false)
                   (rc/color 1.9 1.9 1.9)))))
+    (t/testing "eye between light and surface, in shadow"
+      (let [eyev (r/vector 0 0 -1)
+            normalv (r/vector 0 0 -1)
+            light (point-light (r/point 0 0 -10) (rc/color 1 1 1))]
+        (t/is (=? (lighting m p light eyev normalv true)
+                  (rc/color 0.1 0.1 0.1)))))
     (t/testing "eye offset 45deg, between light and surface"
       (let [eyev (r/vector 0 s22 (- s22))
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 0 -10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv)
+        (t/is (=? (lighting m p light eyev normalv false)
                   (rc/color 1.0 1.0 1.0)))))
     (t/testing "light offset 45deg"
       (let [eyev (r/vector 0 0 -1)
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 10 -10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv)
+        (t/is (=? (lighting m p light eyev normalv false)
                   (rc/color 0.7364 0.7364 0.7364)))))
     (t/testing "eye in light reflection"
       (let [eyev (r/vector 0 (- s22) (- s22))
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 10 -10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv)
+        (t/is (=? (lighting m p light eyev normalv false)
                   (rc/color 1.6364 1.6364 1.6364)))))
     (t/testing "light behind surface"
       (let [eyev (r/vector 0 0 -1)
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 0 10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv)
+        (t/is (=? (lighting m p light eyev normalv false)
                   (rc/color 0.1 0.1 0.1)))))))
 
 
@@ -355,7 +361,7 @@
                   normal (normal-at (:intersection/object ray-hit) point)
                   eye (r/- (:ray/direction r))
                   material (-> ray-hit :intersection/object :sphere/material)
-                  lighted-color (lighting material point light eye normal)]
+                  lighted-color (lighting material point light eye normal false)]
               (rc/pixel-write! cnv x y lighted-color))))))
     cnv))
 
