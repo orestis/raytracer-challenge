@@ -34,6 +34,7 @@
 (defn sphere
   ([] (sphere (swap! sphere-ids inc)))
   ([id] {:shape/id id
+         :shape/type :sphere
          :shape/material (material)
          :shape/transform (m/identity-matrix 4)}))
 
@@ -61,9 +62,10 @@
          (m/mmul m direction))))
 
 
-(defn intersect [ray sphere]
-  (let [ray2 (ray-transform ray (m/inverse (:shape/transform sphere)))
-        {:ray/keys [direction origin]} ray2
+(defmulti local-intersect (fn [ray shape]
+                            (:shape/type shape)))
+(defmethod local-intersect :sphere [ray shape]
+  (let [{:ray/keys [direction origin]} ray
         sphere-to-ray (r/- origin (r/point 0 0 0))
         a (m/dot direction direction)
         b- (m/mul -2 (m/dot direction sphere-to-ray))
@@ -76,8 +78,12 @@
                       (m/mul 2 a))
             t2 (m/div (m/add b- (m/sqrt discriminant))
                       (m/mul 2 a))]
-        [(intersection t1 sphere)
-         (intersection t2 sphere)]))))
+        [(intersection t1 shape)
+         (intersection t2 shape)]))))
+
+(defn intersect [ray shape]
+  (let [ray2 (ray-transform ray (m/inverse (:shape/transform shape)))]
+    (local-intersect ray2 shape)))
 
 (t/deftest ray-intersect
   (t/testing "two points"
@@ -214,11 +220,16 @@
       (->> (spit "sphere.ppm")))
   )
 
+(defmulti local-normal-at (fn [s local-point]
+                            (:shape/type s)) )
+(defmethod local-normal-at :sphere [s local-point]
+  (m/sub local-point (r/point 0 0 0)))
+
 
 (defn normal-at [s world-point]
   (let [{:shape/keys [transform]} s
         object-point (m/mmul (m/inverse transform) world-point)
-        object-normal (m/sub object-point (r/point 0 0 0))
+        object-normal (local-normal-at s object-point)
         world-normal (m/mmul (-> transform m/inverse m/transpose) object-normal)]
     (-> world-normal
         (m/mset 3 0)
