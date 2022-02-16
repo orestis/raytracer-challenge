@@ -121,7 +121,7 @@
 
 (defn shade-hit [world comps]
   (rays/lighting
-   (-> comps :intersection/object :sphere/material)
+   (-> comps :intersection/object :shape/material)
    (:comps/point comps)
    (:world/light world)
    (:comps/eyev comps)
@@ -184,11 +184,11 @@
       (t/is (rays/=? c (rc/color 0.38066, 0.47583, 0.2855)))))
   (t/testing "behind"
     (let [w (-> (default-world)
-                (update-in [:world/objects 0] assoc-in [:sphere/material :material/ambient] 1.0)
-                (update-in [:world/objects 1] assoc-in [:sphere/material :material/ambient] 1.0))
+                (update-in [:world/objects 0] assoc-in [:shape/material :material/ambient] 1.0)
+                (update-in [:world/objects 1] assoc-in [:shape/material :material/ambient] 1.0))
           r (ray (r/point 0 0 0.75) (r/vector 0 0 -1))
           c (color-at w r)]
-      (t/is (= c (-> w :world/objects second :sphere/material :material/color))))))
+      (t/is (= c (-> w :world/objects second :shape/material :material/color))))))
 
 
 (defn view-transform [from to up]

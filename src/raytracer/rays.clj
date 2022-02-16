@@ -33,9 +33,9 @@
 
 (defn sphere
   ([] (sphere (swap! sphere-ids inc)))
-  ([id] {:sphere/id id
-         :sphere/material (material)
-         :sphere/transform (m/identity-matrix 4)}))
+  ([id] {:shape/id id
+         :shape/material (material)
+         :shape/transform (m/identity-matrix 4)}))
 
 
 (defn point-light [position intensity]
@@ -43,10 +43,10 @@
    :light/intensity intensity})
 
 (defn set-material [s m]
-  (assoc s :sphere/material m))
+  (assoc s :shape/material m))
 
 (defn set-transform [s t]
-  (assoc s :sphere/transform t))
+  (assoc s :shape/transform t))
 
 (defn intersection [t object]
   {:intersection/t t
@@ -62,7 +62,7 @@
 
 
 (defn intersect [ray sphere]
-  (let [ray2 (ray-transform ray (m/inverse (:sphere/transform sphere)))
+  (let [ray2 (ray-transform ray (m/inverse (:shape/transform sphere)))
         {:ray/keys [direction origin]} ray2
         sphere-to-ray (r/- origin (r/point 0 0 0))
         a (m/dot direction direction)
@@ -216,7 +216,7 @@
 
 
 (defn normal-at [s world-point]
-  (let [{:sphere/keys [transform]} s
+  (let [{:shape/keys [transform]} s
         object-point (m/mmul (m/inverse transform) world-point)
         object-normal (m/sub object-point (r/point 0 0 0))
         world-normal (m/mmul (-> transform m/inverse m/transpose) object-normal)]
@@ -360,7 +360,7 @@
             (let [point (position r (:intersection/t ray-hit))
                   normal (normal-at (:intersection/object ray-hit) point)
                   eye (r/- (:ray/direction r))
-                  material (-> ray-hit :intersection/object :sphere/material)
+                  material (-> ray-hit :intersection/object :shape/material)
                   lighted-color (lighting material point light eye normal false)]
               (rc/pixel-write! cnv x y lighted-color))))))
     cnv))
