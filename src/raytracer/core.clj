@@ -9,6 +9,9 @@
 
 (def EPSILON 0.00001)
 
+(defn =? [x y]
+  (m/equals x y EPSILON))
+
 (defn tuple [& args]
   (m/array args))
 
@@ -140,8 +143,6 @@
   (t/is (= 20.0 (dot (vector 1 2 3)
                      (vector 2 3 4)))))
 
-
-(m/select-view (vector 1 2 3) :butlast)
 
 (defn cross [v1 v2]
   (let [v3 (m/cross (m/select v1 :butlast)

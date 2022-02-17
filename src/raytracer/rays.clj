@@ -3,22 +3,23 @@
             [raytracer.core :as r]
             [raytracer.matrix :as rm]
             [raytracer.canvas :as rc]
+            [raytracer.patterns :as rp]
             [clojure.test :as t]))
 
 (defn ray [origin direction]
   {:ray/origin origin
    :ray/direction direction})
 
-(defn position [ray t]
+(defn ray-position [ray t]
   (m/add (:ray/origin ray)
          (m/mul (:ray/direction ray) t)))
 
-(t/deftest ray-position
+(t/deftest ray-position-test
   (let [ray (ray (r/point 2 3 4) (r/vector 1 0 0))]
-    (t/is (= (position ray 0) (r/point 2 3 4)))
-    (t/is (= (position ray 1) (r/point 3 3 4)))
-    (t/is (= (position ray -1) (r/point 1 3 4)))
-    (t/is (= (position ray 2.5) (r/point 4.5 3 4)))))
+    (t/is (= (ray-position ray 0) (r/point 2 3 4)))
+    (t/is (= (ray-position ray 1) (r/point 3 3 4)))
+    (t/is (= (ray-position ray -1) (r/point 1 3 4)))
+    (t/is (= (ray-position ray 2.5) (r/point 4.5 3 4)))))
 
 (defn material
   ([] (material 0.1 0.9 0.9 200.0 (rc/color 1 1 1)))
@@ -327,9 +328,36 @@
     (t/is (m/equals r (r/vector 1 0 0)
                     0.00001))))
 
-(defn lighting [material point light-source eyev normalv in-shadow]
-  (let [{:material/keys [ambient diffuse shininess specular color]} material
+(defn pattern-at-object [pattern object point]
+  (let [object-point (m/mmul (m/inverse (:shape/transform object)) point)
+        pattern-point (m/mmul (m/inverse (:pattern/transform pattern)) object-point)]
+    (rp/pattern-at pattern pattern-point)))
+
+(t/deftest stripe-at-object-test
+  (t/testing "stripes with object transformation"
+    (let [object (-> (sphere)
+                     (set-transform (rm/scaling 2 2 2)))
+          pattern (rp/stripe-pattern rp/white rp/black)
+          c (pattern-at-object pattern object (r/point 1.5 0 0))]
+      (t/is (= c rp/white))))
+  (t/testing "stripes with pattern transformation"
+    (let [object (-> (sphere))
+          pattern (-> (rp/stripe-pattern rp/white rp/black)
+                      (rp/set-pattern-transform (rm/scaling 2 2 2)))
+          c (pattern-at-object pattern object (r/point 1.5 0 0))]
+      (t/is (= c rp/white))))
+  (t/testing "stripes with both"
+    (let [object (-> (sphere)
+                     (set-transform (rm/scaling 2 2 2)))
+          pattern (-> (rp/stripe-pattern rp/white rp/black)
+                      (rp/set-pattern-transform (rm/translation 0.5 0 0)))
+          c (pattern-at-object pattern object (r/point 2.5 0 0))]
+      (t/is (= c rp/white)))))
+
+(defn lighting [material object point light-source eyev normalv in-shadow]
+  (let [{:material/keys [ambient diffuse shininess specular color pattern]} material
         {:light/keys [intensity position]} light-source
+        color (if pattern (pattern-at-object pattern object point) color)
         effective-color (m/mul color intensity)
         lightv (m/normalise (m/sub position point))
         l-ambient (m/mul effective-color ambient)
@@ -351,44 +379,57 @@
 
 (t/deftest lighting-test
   (let [m (material)
+        object (sphere)
         p (r/point 0 0 0)
         s22 (m/div (m/sqrt 2) 2)]
     (t/testing "eye between light and surface"
       (let [eyev (r/vector 0 0 -1)
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 0 -10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv false)
+        (t/is (=? (lighting m object p light eyev normalv false)
                   (rc/color 1.9 1.9 1.9)))))
     (t/testing "eye between light and surface, in shadow"
       (let [eyev (r/vector 0 0 -1)
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 0 -10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv true)
+        (t/is (=? (lighting m object p light eyev normalv true)
                   (rc/color 0.1 0.1 0.1)))))
     (t/testing "eye offset 45deg, between light and surface"
       (let [eyev (r/vector 0 s22 (- s22))
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 0 -10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv false)
+        (t/is (=? (lighting m object p light eyev normalv false)
                   (rc/color 1.0 1.0 1.0)))))
     (t/testing "light offset 45deg"
       (let [eyev (r/vector 0 0 -1)
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 10 -10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv false)
+        (t/is (=? (lighting m object p light eyev normalv false)
                   (rc/color 0.7364 0.7364 0.7364)))))
     (t/testing "eye in light reflection"
       (let [eyev (r/vector 0 (- s22) (- s22))
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 10 -10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv false)
+        (t/is (=? (lighting m object p light eyev normalv false)
                   (rc/color 1.6364 1.6364 1.6364)))))
     (t/testing "light behind surface"
       (let [eyev (r/vector 0 0 -1)
             normalv (r/vector 0 0 -1)
             light (point-light (r/point 0 0 10) (rc/color 1 1 1))]
-        (t/is (=? (lighting m p light eyev normalv false)
-                  (rc/color 0.1 0.1 0.1)))))))
+        (t/is (=? (lighting m object p light eyev normalv false)
+                  (rc/color 0.1 0.1 0.1)))))
+    (t/testing "lighting with pattern"
+      (let [m (-> m
+                  (assoc :material/pattern (rp/stripe-pattern rp/white rp/black)
+                         :material/ambient 1.0
+                         :material/diffuse 0
+                         :material/specular 0))
+            eyev (r/vector 0 0 -1)
+            normalv (r/vector 0 0 -1)
+            light (point-light (r/point 0 0 -10) (rc/color 1 1 1))]
+        (t/is (=? (lighting m object (r/point 0.9 0 0) light eyev normalv false) rp/white))
+        (t/is (=? (lighting m object (r/point 1.1 0 0) light eyev normalv false) rp/black))
+        ))))
 
 
 (defn draw-sphere-3d []
@@ -413,11 +454,11 @@
               r (ray ray-origin (r/normalise (r/- world-position ray-origin)))
               xs (intersect r shape)]
           (when-let [ray-hit (hit xs)]
-            (let [point (position r (:intersection/t ray-hit))
+            (let [point (ray-position r (:intersection/t ray-hit))
                   normal (normal-at (:intersection/object ray-hit) point)
                   eye (r/- (:ray/direction r))
                   material (-> ray-hit :intersection/object :shape/material)
-                  lighted-color (lighting material point light eye normal false)]
+                  lighted-color (lighting material shape point light eye normal false)]
               (rc/pixel-write! cnv x y lighted-color))))))
     cnv))
 

@@ -1,6 +1,7 @@
 (ns raytracer.world
   (:require [clojure.core.matrix :as m]
             [raytracer.core :as r]
+            [raytracer.patterns :as rp]
             [raytracer.rays :refer
              [set-transform set-material
               material ray intersect
@@ -45,7 +46,7 @@
 
 (defn prepare-computations [{:intersection/keys [t object] :as isection}
                             ray]
-  (let [point (rays/position ray t)
+  (let [point (rays/ray-position ray t)
         normalv (rays/normal-at object point)
         eyev (r/- (:ray/direction ray))
         inside (neg? (m/dot normalv eyev))
@@ -126,6 +127,7 @@
 (defn shade-hit [world comps]
   (rays/lighting
    (-> comps :intersection/object :shape/material)
+   (-> comps :intersection/object)
    (:comps/point comps)
    (:world/light world)
    (:comps/eyev comps)
@@ -320,43 +322,46 @@
 (defn render-example [w h]
   (let [floor-material (-> (material)
                            (assoc :material/specular 0
+                                  :material/pattern (rp/stripe-pattern (rc/color 0.9 0.1 0.1)
+                                                                       (rc/color 0.1 0.9 0.1))
                                   :material/color (rc/color 1 0.9 0.9)))
-        floor-plane (rays/shape :plane)
-        floor (-> (sphere)
-                  (rays/set-transform (rm/scaling 10 0.01 10))
-                  (rays/set-material floor-material))
-        left-wall (-> (sphere)
-                      (rays/set-material floor-material)
-                      (rays/set-transform (m/mmul (rm/translation 0 0 5)
-                                                  (rm/rotation-y (- (/ Math/PI 4)))
-                                                  (rm/rotation-x (/ Math/PI 2))
-                                                  (rm/scaling 10 0.01 10))))
-        right-wall (-> (sphere)
-                       (rays/set-material floor-material)
-                       (rays/set-transform (m/mmul (rm/translation 0 0 5)
-                                                   (rm/rotation-y (/ Math/PI 4))
-                                                   (rm/rotation-x (/ Math/PI 2))
-                                                   (rm/scaling 10 0.01 10))))
+        floor-plane (-> (rays/shape :plane)
+                        (rays/set-material floor-material))
+
         middle (-> (sphere)
                    (rays/set-transform (rm/translation -0.5 1 0.5))
-                   (rays/set-material (-> (material)
+                   (rays/set-material (-> floor-material
                                           (assoc :material/diffuse 0.7
                                                  :material/specular 0.3
                                                  :material/color (rc/color 0.1 1 0.5)))))
         right (-> (sphere)
-                   (rays/set-transform (m/mmul (rm/translation 1.5 0.5 -0.5)
-                                               (rm/scaling 0.5 0.5 0.5)))
-                   (rays/set-material (-> (material)
-                                          (assoc :material/diffuse 0.7
-                                                 :material/specular 0.3
-                                                 :material/color (rc/color 0.5 1 0.1)))))
+                   (rays/set-transform (m/mmul (rm/translation 1.2 0.5 -0.5)
+                                               (rm/scaling 0.8 0.5 0.5)))
+                   (rays/set-material (-> floor-material
+                                          (assoc :material/pattern (-> (rp/stripe-pattern (rc/color 0.1 0.7 0.4)
+                                                                                          (rc/color 0.2 0.3 0.5))
+                                                                       (rp/set-pattern-transform
+                                                                         (m/mmul
+                                                                           (rm/rotation-y (/ Math/PI 2))
+                                                                          (rm/rotation-z (/ Math/PI 3))
+                                                                          (rm/scaling 0.3 0.3 0.3))))))))
         left (-> (sphere)
-                   (rays/set-transform (m/mmul (rm/translation -1.5 0.33 -0.75)
-                                               (rm/scaling 0.33 0.33 0.33)))
-                   (rays/set-material (-> (material)
-                                          (assoc :material/diffuse 0.7
-                                                 :material/specular 0.3
-                                                 :material/color (rc/color 1 0.8 0.1)))))
+                   (rays/set-transform (m/mmul (rm/translation -1.9 0.33 -0.75)
+                                               (rm/scaling 0.33 0.93 0.33)))
+                   (rays/set-material (-> floor-material
+                                          (assoc
+                                           :material/pattern
+                                           (->
+                                            (rp/gradient-pattern (rc/color 0.4 0.4 0.8)
+                                                                 (rc/color 0.8 0.5 0.9))
+                                            (rp/set-pattern-transform
+                                              (m/mmul
+                                               (rm/translation 0.5 0 0)
+                                               (rm/rotation-y (/ Math/PI 3))
+                                               (rm/rotation-z (/ Math/PI 4)))))
+                                           :material/diffuse 0.7
+                                           :material/specular 0.8
+                                           :material/color (rc/color 1 0.8 0.1)))))
 
         world (-> (default-world)
                   (assoc :world/objects [floor-plane middle right left]
@@ -384,7 +389,7 @@
   (require '[clj-async-profiler.core :as prof])
 
   (time
-   (-> (render-example 600 480)
+   (-> (render-example 640 480)
        (rc/canvas-str)
        (->> (spit "world.ppm"))))
   (prof/serve-files 7001)
