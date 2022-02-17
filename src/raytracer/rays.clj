@@ -32,11 +32,14 @@
 
 (defonce shape-ids (atom 0))
 
+
 (defn shape [type]
   {:shape/id (swap! shape-ids inc)
    :shape/type type
    :shape/material (material)
-   :shape/transform (m/identity-matrix 4)})
+   :shape/transform (m/identity-matrix 4)
+   :shape/transform-inv (m/identity-matrix 4)
+   :shape/transform-inv-tp (m/identity-matrix 4)})
 
 (defn sphere []
   (shape :sphere))
@@ -52,7 +55,9 @@
   (assoc s :shape/material m))
 
 (defn set-transform [s t]
-  (assoc s :shape/transform t))
+  (assoc s :shape/transform t
+         :shape/transform-inv (m/inverse t)
+         :shape/transform-inv-tp (m/transpose (m/inverse t))))
 
 (defn intersection [t object]
   {:intersection/t t
@@ -127,7 +132,7 @@
       (t/is (= object p)))))
 
 (defn intersect [ray shape]
-  (let [ray2 (ray-transform ray (m/inverse (:shape/transform shape)))]
+  (let [ray2 (ray-transform ray (:shape/transform-inv shape))]
     (local-intersect ray2 shape)))
 
 (t/deftest ray-intersect
@@ -275,10 +280,10 @@
 
 
 (defn normal-at [s world-point]
-  (let [{:shape/keys [transform]} s
-        object-point (m/mmul (m/inverse transform) world-point)
+  (let [{:shape/keys [transform-inv transform-inv-tp]} s
+        object-point (m/mmul transform-inv world-point)
         object-normal (local-normal-at s object-point)
-        world-normal (m/mmul (-> transform m/inverse m/transpose) object-normal)]
+        world-normal (m/mmul transform-inv-tp object-normal)]
     (-> world-normal
         (m/mset 3 0)
         (m/normalise))))
@@ -329,8 +334,8 @@
                     0.00001))))
 
 (defn pattern-at-object [pattern object point]
-  (let [object-point (m/mmul (m/inverse (:shape/transform object)) point)
-        pattern-point (m/mmul (m/inverse (:pattern/transform pattern)) object-point)]
+  (let [object-point (m/mmul (:shape/transform-inv object) point)
+        pattern-point (m/mmul (:pattern/transform-inv pattern) object-point)]
     (rp/pattern-at pattern pattern-point)))
 
 (t/deftest stripe-at-object-test

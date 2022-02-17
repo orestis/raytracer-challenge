@@ -254,7 +254,12 @@
      :camera/pixel-size pixel-size
      :camera/half-width half-width
      :camera/half-height half-height
-     :camera/transform (m/identity-matrix 4)}))
+     :camera/transform (m/identity-matrix 4)
+     :camera/transform-inv (m/identity-matrix 4)}))
+
+(defn set-camera-transform [c t]
+  (assoc c :camera/transform t
+         :camera/transform-inv (m/inverse t)))
 
 (t/deftest camera-pixel-size-test
   (t/testing "horizontal"
@@ -267,13 +272,13 @@
                (:camera/pixel-size c))))))
 
 
-(defn ray-for-pixel [{:camera/keys [pixel-size half-height half-width transform]} px py]
+(defn ray-for-pixel [{:camera/keys [pixel-size half-height half-width transform-inv]} px py]
   (let [xoffset (m/mul (+ px 0.5) pixel-size)
         yoffset (m/mul (+ py 0.5) pixel-size)
         world-x (- half-width xoffset)
         world-y (- half-height yoffset)
-        pixel (m/mmul (m/inverse transform) (r/point world-x world-y -1))
-        origin (m/mmul (m/inverse transform) (r/point 0 0 0))
+        pixel (m/mmul transform-inv  (r/point world-x world-y -1))
+        origin (m/mmul transform-inv (r/point 0 0 0))
         direction (m/normalise (m/sub pixel origin))]
     (ray origin direction)))
 
@@ -290,8 +295,9 @@
       (t/is (rays/=? direction (r/vector 0.66519, 0.33259, -0.66851)))))
   (t/testing "camera is transformed"
     (let [c (-> (new-camera 201 101 (/ Math/PI 2))
-                (assoc :camera/transform (m/mmul (rm/rotation-y (/ Math/PI 4))
-                                                 (rm/translation 0 -2 5))))
+                (set-camera-transform
+                  (m/mmul (rm/rotation-y (/ Math/PI 4))
+                          (rm/translation 0 -2 5))))
           {:ray/keys [origin direction]} (ray-for-pixel c 100 50)]
       (t/is (rays/=? origin (r/point 0 2 -5)))
       (t/is (rays/=? direction (r/vector (m/div (m/sqrt 2) ) 0 (- (m/div (m/sqrt 2) 2))))))))
@@ -313,7 +319,8 @@
           to (r/point 0 0 0)
           up (r/vector 0 1 0)
           c (-> (new-camera 11 11 (/ Math/PI 2))
-                (assoc :camera/transform (view-transform from to up)))
+                (set-camera-transform
+                 (view-transform from to up)))
           img (render c w)]
       (t/is (rays/=? (rc/pixel-read img 5 5)
                      (rc/color 0.38066 0.47583 0.2855))))))
@@ -368,17 +375,17 @@
                          :world/light (point-light (r/point -10 10 -10)
                                                    (rc/color 1 1 1))))
         camera (-> (new-camera w h (/ Math/PI 3))
-                   (assoc :camera/transform (view-transform (r/point 0 1.5 -5)
-                                                            (r/point 0 1 0)
-                                                            (r/vector 0 1 0))))]
+                   (set-camera-transform (view-transform (r/point 0 1.5 -5)
+                                                         (r/point 0 1 0)
+                                                         (r/vector 0 1 0))))]
     (render camera world)))
 
 (defn render-default [w h]
   (let [world (default-world)
         camera (-> (new-camera w h (/ Math/PI 4))
-                   (assoc :camera/transform (view-transform (r/point 5 4.5 -1)
-                                                            (r/point 0 0 0)
-                                                            (r/vector 0 1 0))))]
+                   (set-camera-transform (view-transform (r/point 5 4.5 -1)
+                                                         (r/point 0 0 0)
+                                                         (r/vector 0 1 0))))]
     (render camera world)))
 
 (comment

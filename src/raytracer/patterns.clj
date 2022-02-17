@@ -8,20 +8,24 @@
 (def white (rc/color 1 1 1))
 (def black (rc/color 0 0 0))
 
+(defn base-pattern [type]
+  {:pattern/type type
+   :pattern/transform (m/identity-matrix 4)
+   :pattern/transform-inv (m/identity-matrix 4)})
+
 (defn stripe-pattern [a b]
-  {:stripe/a a
-   :stripe/b b
-   :pattern/type :stripes
-   :pattern/transform (m/identity-matrix 4)})
+  (merge (base-pattern :stripes)
+         {:stripe/a a
+          :stripe/b b}))
 
 (defn gradient-pattern [a b]
-  {:gradient/a a
-   :gradient/b b
-   :pattern/type :gradient
-   :pattern/transform (m/identity-matrix 4)})
+  (merge (base-pattern :gradient)
+         {:gradient/a a
+          :gradient/b b}))
 
 (defn set-pattern-transform [p t]
-  (assoc p :pattern/transform t))
+  (assoc p :pattern/transform t
+         :pattern/transform-inv (m/inverse t)))
 
 
 (defn stripe-at [s p]
