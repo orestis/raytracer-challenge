@@ -338,8 +338,13 @@
         middle (-> (sphere)
                    (rays/set-transform (rm/translation -0.5 1 0.5))
                    (rays/set-material (-> floor-material
-                                          (assoc :material/diffuse 0.7
-                                                 :material/specular 0.3
+                                          (assoc
+                                            :material/pattern
+                                           (-> (rp/checkers-pattern (rc/color 0.12 0.34 0.55)
+                                                                    (rc/color 0.55 0.12 0.34))
+                                               (rp/set-pattern-transform (rm/scaling 0.2 0.2 0.4)))
+                                           :material/diffuse 0.9
+                                                 :material/specular 0.8
                                                  :material/color (rc/color 0.1 1 0.5)))))
         right (-> (sphere)
                    (rays/set-transform (m/mmul (rm/translation 1.2 0.5 -0.5)
